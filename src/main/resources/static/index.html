@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AI Legal Document Assistant</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; background:#f7f7f8; }
+  h1 { font-size: 24px; }
+  .card { background: #fff; border: 1px solid #e2e2e2; border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+  input[type=file] { margin-bottom: 10px; }
+  button { background: #1a1a1a; color: #fff; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  button:hover { background: #333; }
+  .risk-LOW { color: #1a7f37; font-weight: bold; }
+  .risk-MEDIUM { color: #9a6700; font-weight: bold; }
+  .risk-HIGH { color: #c62828; font-weight: bold; }
+  .risk-UNKNOWN { color: #666; font-weight: bold; }
+  pre { white-space: pre-wrap; font-family: inherit; }
+  .clause { border-left: 3px solid #ddd; padding-left: 12px; margin-bottom: 10px; }
+  .clause b { display:block; margin-bottom: 4px; }
+  #qaBox { display:none; }
+  .ask-row { display: flex; gap: 8px; }
+  .ask-row input { flex:1; padding: 8px; border-radius: 6px; border: 1px solid #ccc; }
+  .answer { margin-top: 12px; background:#fafafa; border-radius:6px; padding:10px; }
+</style>
+</head>
+<body>
+
+<h1>&#128220; AI Legal Document Assistant</h1>
+<p>Upload a contract (.pdf, .docx, or .txt) to get a plain-English summary, key clauses, a risk flag, and ask follow-up questions.</p>
+
+<div class="card">
+  <input type="file" id="fileInput" accept=".pdf,.docx,.txt">
+  <br>
+  <button onclick="upload()">Analyze document</button>
+  <p id="status"></p>
+</div>
+
+<div class="card" id="resultCard" style="display:none;">
+  <h2 id="fileName"></h2>
+  <p>Type: <b id="docType"></b> &nbsp;|&nbsp; Risk: <span id="riskLevel"></span></p>
+
+  <h3>Summary</h3>
+  <pre id="summary"></pre>
+
+  <h3>Risk Notes</h3>
+  <pre id="riskNotes"></pre>
+
+  <h3>Key Clauses</h3>
+  <div id="clauses"></div>
+
+  <div id="qaBox">
+    <h3>Ask a question about this document</h3>
+    <div class="ask-row">
+      <input type="text" id="questionInput" placeholder="e.g. Can either party terminate early?">
+      <button onclick="ask()">Ask</button>
+    </div>
+    <div class="answer" id="answerBox" style="display:none;"></div>
+  </div>
+</div>
+
+<p style="color:#888; font-size: 12px;">This tool provides general information only and is not a substitute for advice from a licensed attorney.</p>
+
+<script>
+let currentDocId = null;
+
+async function upload() {
+  const fileInput = document.getElementById('fileInput');
+  const status = document.getElementById('status');
+  if (!fileInput.files.length) { status.textContent = 'Please choose a file first.'; return; }
+
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  status.textContent = 'Analyzing... this can take a few seconds.';
+
+  try {
+    const res = await fetch('/api/documents/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) { status.textContent = 'Error: ' + (data.error || 'unknown error'); return; }
+    status.textContent = '';
+    renderResult(data);
+  } catch (e) {
+    status.textContent = 'Request failed: ' + e.message;
+  }
+}
+
+function renderResult(data) {
+  currentDocId = data.id;
+  document.getElementById('resultCard').style.display = 'block';
+  document.getElementById('fileName').textContent = data.fileName;
+  document.getElementById('docType').textContent = data.documentType;
+  const riskSpan = document.getElementById('riskLevel');
+  riskSpan.textContent = data.riskLevel;
+  riskSpan.className = 'risk-' + data.riskLevel;
+  document.getElementById('summary').textContent = data.summary;
+  document.getElementById('riskNotes').textContent = data.riskNotes;
+
+  const clausesDiv = document.getElementById('clauses');
+  clausesDiv.innerHTML = '';
+  const clauses = data.clauses || {};
+  if (Object.keys(clauses).length === 0) {
+    clausesDiv.innerHTML = '<i>No standard clauses were confidently identified.</i>';
+  } else {
+    for (const [type, text] of Object.entries(clauses)) {
+      const div = document.createElement('div');
+      div.className = 'clause';
+      div.innerHTML = '<b>' + type + '</b>' + text;
+      clausesDiv.appendChild(div);
+    }
+  }
+  document.getElementById('qaBox').style.display = 'block';
+}
+
+async function ask() {
+  const question = document.getElementById('questionInput').value.trim();
+  if (!question || !currentDocId) return;
+  const answerBox = document.getElementById('answerBox');
+  answerBox.style.display = 'block';
+  answerBox.textContent = 'Thinking...';
+
+  const res = await fetch('/api/documents/' + currentDocId + '/ask', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question })
+  });
+  const data = await res.json();
+  answerBox.textContent = res.ok ? data.answer : ('Error: ' + data.error);
+}
+</script>
+
+</body>
+</html>

@@ -1,4 +1,5 @@
 # AI Legal Document Assistant
+![App Screenshot](docs/screenshot.png)
 
 A Spring Boot (Java 17+) backend that lets a user upload a legal document
 (PDF, DOCX, or TXT) and automatically get:
